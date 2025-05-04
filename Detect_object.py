@@ -11,9 +11,9 @@ class Detect_object:
         self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
         self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
         self.area_min = 10000
-        self.rectangle_thresh = 70
+        self.rectangle_thresh = 60
         self.up_trapezoid_thresh = 50
-        self.down_trapezoid_thresh = 50
+        self.down_trapezoid_thresh = 80
         self.square_thresh = 30
         self.canny_threshold1 = 50
         self.canny_threshold2 = 88
@@ -26,12 +26,10 @@ class Detect_object:
         self.red_up = (50, 50, 255)  # 修正了这里的括号问题
         self.blue_low = (100, 0, 0)
         self.blue_up = (255, 50, 50)
-        self.white_low = (150, 150, 150)
-        self.white_up = (255, 255, 255)
         self.red_iter = 1
         self.blue_iter = 1
-        self.white_iter = 1
         self._threold = 50
+        self.frame_count = 0
         self.init_trackbars()
 
     def init_trackbars(self):
@@ -113,11 +111,14 @@ class Detect_object:
                     AC = int(np.sqrt((A[0]-C[0])**2 + (A[1]-C[1])**2))
                     AD = int(np.sqrt((A[0]-D[0])**2 + (A[1]-D[1])**2))
 
+                    angle_AB_CD = np.abs(np.arctan2(B[1]-A[1], B[0]-A[0]) - np.arctan2(D[1]-C[1], D[0]-C[0]))
+                    angle_AC_BD = np.abs(np.arctan2(C[1]-A[1], C[0]-A[0]) - np.arctan2(D[1]-B[1], D[0]-B[0]))
+                    
                     if AB - AC > self.rectangle_thresh and CD - AD > self.rectangle_thresh:
                         shape_type = "矩形"
-                    elif CD - AB > self.up_trapezoid_thresh and CD - AD > self.rectangle_thresh:
+                    elif min(angle_AB_CD, angle_AC_BD) < np.pi/18 and CD > AB:
                         shape_type = "上梯形"
-                    elif AB - CD > self.down_trapezoid_thresh and AB - AD > self.rectangle_thresh:
+                    elif min(angle_AB_CD, angle_AC_BD) < np.pi/18 and CD < AB:
                         shape_type = "下梯形"
                     elif AB - AC <= self.square_thresh and CD - AD <= self.square_thresh:
                         shape_type = "正方形"
@@ -179,51 +180,77 @@ class Detect_object:
 
         return hollow, color
 
+
+def capture_frame(self):
+    
+    if not self.cap.isOpened():
+        print("无法打开摄像头")
+        exit()
+    ret,frame=self.cap.read()
+   
+    if ret:
+        
+        cv2.imwrite("captured_frame"+str(self.frame_count)+".jpg", frame)  # 保存为jpg格式
+        self.frame_count += 1
+        print("图像已保存为 captured_frame+x.jpg")
+    self.cap.release()
+    cv2.destroyAllWindows()
+    return ret,frame
 if __name__ == "__main__":
-        detector = Detect_object()
-        img = cv2.imread("D:\\table\\berryPI\\photo\\11.jpg")
-        results = []
-        i = 0
-        while i < 33:
-            i += 1
-            shape1, hollow, color = detector.detect_shape_color(img)
+    detector = Detect_object()
+    img = cv2.imread("D:/table/berryPI/photo/29.jpg")  # 使用正斜杠路径更安全
+
+    results = []
+    i = 0
+    while i < 33:
+        # 添加窗口显示和退出检测
+        cv2.imshow("Detection Preview", img)
+        if cv2.waitKey(1) == 27:  # ESC退出
+            break
+        
+        # 执行检测
+        shape1, hollow, color = detector.detect_shape_color(img)
+        
+        # 收集有效结果
+        if None not in (shape1, hollow, color):
             results.append((shape1, hollow, color))
-            print(f"形状: {shape1}, 空心: {hollow}, 颜色: {color}")
-            time.sleep(0.1)
-            if cv2.waitKey(1) == 27:
-                break
-        cv2.destroyAllWindows()
+            print(f"第{i+1}次检测 - 形状: {shape1}, 空心: {hollow}, 颜色: {color}")
+        
+        i += 1
+        time.sleep(0.1)  # 调整到循环末尾
 
-        if results:
-            shapes, hollows, colors = zip(*results)
-            most_common_shape = Counter(shapes).most_common(1)[0][0]
-            most_common_hollow = Counter(hollows).most_common(1)[0][0]
-            most_common_color = Counter(colors).most_common(1)[0][0]
+    cv2.destroyAllWindows()
 
-            if most_common_shape == "矩形":
-                if most_common_hollow == 1:
-                    Shape = 1
-                elif most_common_hollow == 2:
-                    Shape = 2
-            elif most_common_shape == "上梯形":
-                if most_common_hollow == 1:
-                    Shape = 3
-                elif most_common_hollow == 2:
-                    Shape = 4
-            elif most_common_shape == "下梯形":
-                if most_common_hollow == 1:
-                    Shape = 5
-                elif most_common_hollow == 2:
-                    Shape = 6
-            elif most_common_shape == "正方形":
-                if most_common_hollow == 1:
-                    Shape = 7
-                elif most_common_hollow == 2:
-                    Shape = 8
-            else:
-                Shape = None
+    if results:
+        shapes, hollows, colors = zip(*results)
+        most_common_shape = Counter(shapes).most_common(1)[0][0]
+        most_common_hollow = Counter(hollows).most_common(1)[0][0]
+        most_common_color = Counter(colors).most_common(1)[0][0]
 
-            print(f"最终的形状: {most_common_shape}, 最终的空心: {most_common_hollow}, 最终的颜色: {most_common_color}")
-            print(f"最终确定的形状代号: {Shape}")
+        if most_common_shape == "矩形":
+            if most_common_hollow == 1:
+                Shape = 1
+            elif most_common_hollow == 2:
+                Shape = 2
+        elif most_common_shape == "上梯形":
+            if most_common_hollow == 1:
+                Shape = 3
+            elif most_common_hollow == 2:
+                Shape = 4
+        elif most_common_shape == "下梯形":
+            if most_common_hollow == 1:
+                Shape = 5
+            elif most_common_hollow == 2:
+                Shape = 6
+        elif most_common_shape == "正方形":
+            if most_common_hollow == 1:
+                Shape = 7
+            elif most_common_hollow == 2:
+                Shape = 8
         else:
-            print("没有检测到有效的形状和颜色")
+            Shape = None
+
+        print(f"最终的形状: {most_common_shape}, 最终的空心: {most_common_hollow}, 最终的颜色: {most_common_color}")
+        print(f"最终确定的形状代号: {Shape}")
+    else:
+        print("没有检测到有效的形状和颜色")
