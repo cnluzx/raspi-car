@@ -16,12 +16,12 @@ class Detect_object:
         self.down_trapezoid_thresh = 50
         self.square_thresh = 30
         self.canny_threshold1 = 50
-        self.canny_threshold2 = 171
+        self.canny_threshold2 = 88
         self.roi_x = 5
         self.roi_y = 5
         self.roi_w = 5
         self.roi_h = 5
-        self.ROI_range = 45
+        self.ROI_range = 50
         self.red_low = (0, 0, 100)
         self.red_up = (50, 50, 255)  # 修正了这里的括号问题
         self.blue_low = (100, 0, 0)
@@ -57,6 +57,7 @@ class Detect_object:
         self.canny_threshold2 = cv2.getTrackbarPos("Canny Thresh2", "Parameters")
 
     def detect_shape_color(self, img):
+        global img_two
         center_x_mu = 0
         center_y_mu = 0
         self.update_parameters()
@@ -74,7 +75,7 @@ class Detect_object:
         img_gradient = cv2.morphologyEx(img_erode, cv2.MORPH_GRADIENT, np.ones((3, 3)))
         if self.if_shape_test:
             cv2.imshow("Gray", img_gray)
-            cv2.imshow("Median", img_two)
+            cv2.imshow("img_two", img_two)
             cv2.imshow("Original", img)
             cv2.imshow("Canny", img_canny)
             cv2.imshow("img_Contours", img_gradient)
@@ -124,7 +125,7 @@ class Detect_object:
                         shape_type = "其他四边形"
                     print(f"检测到形状: {shape_type}, AB={AB:.1f}, CD={CD:.1f}, AC={AC:.1f}, AD={AD:.1f}")
 
-                    hollow, color = self.detect_color(img, center_x_mu, center_y_mu, x, y)
+                    hollow, color = self.detect_color(img_blur, center_x_mu, center_y_mu, x, y)
                     return shape_type, hollow, color
 
         cv2.waitKey(1)
@@ -133,44 +134,37 @@ class Detect_object:
     def detect_color(self, img, center_x, center_y, x, y):
         hollow = None
         color = None
-        ROI_img = img[y:y+self.ROI_range, x:x+self.ROI_range]
-        red_mask = cv2.inRange(ROI_img, self.red_low, self.red_up)
+        
+        ROI_img = img_two[center_y-self.ROI_range:center_y+self.ROI_range, center_x-self.ROI_range:center_x+self.ROI_range]
+        cv2.imshow("ROI", ROI_img)
+        
+        white_count = cv2.countNonZero(ROI_img)  
+        black_count = ROI_img.size - white_count
+        color_counts = { "black": black_count, "white": white_count}
+        max_color = max(color_counts, key=color_counts.get)
+
+        ROI_img_color=img[center_y-self.ROI_range:center_y+self.ROI_range, center_x-self.ROI_range:center_x+self.ROI_range]
+
+        red_mask = cv2.inRange(ROI_img_color, self.red_low, self.red_up)
         red_mask = cv2.erode(red_mask, None, iterations=self.red_iter)
         red_mask = cv2.dilate(red_mask, None, iterations=self.red_iter)
         red_count = cv2.countNonZero(red_mask)
 
-        blue_mask = cv2.inRange(ROI_img, self.blue_low, self.blue_up)
+        blue_mask = cv2.inRange(ROI_img_color, self.blue_low, self.blue_up)
         blue_mask = cv2.erode(blue_mask, None, iterations=self.blue_iter)
         blue_mask = cv2.dilate(blue_mask, None, iterations=self.blue_iter)
         blue_count = cv2.countNonZero(blue_mask)
 
-        white_mask = cv2.inRange(ROI_img, self.white_low, self.white_up)
-        white_mask = cv2.erode(white_mask, None, iterations=self.white_iter)
-        white_mask = cv2.dilate(white_mask, None, iterations=self.white_iter)
-        white_count = cv2.countNonZero(white_mask)
+        edge_color_counts = {"red": red_count, "blue": blue_count}
 
-        color_counts = {"red": red_count, "blue": blue_count, "white": white_count}
-        max_color = max(color_counts, key=color_counts.get)
-        print(f"检测到颜色: {max_color}")
+        max_edge_color = max(edge_color_counts, key=edge_color_counts.get)
+        print(f"边缘检测到颜色: {max_edge_color}")
 
-        if max_color == "white":
+
+
+        if max_color == "black":
             hollow = 2
             print("空心")
-            ROI_img_edge = img[y:y+self.roi_h, x:x+self.roi_w]
-            red_mask_edge = cv2.inRange(ROI_img_edge, self.red_low, self.red_up)
-            red_mask_edge = cv2.erode(red_mask_edge, None, iterations=self.red_iter)
-            red_mask_edge = cv2.dilate(red_mask_edge, None, iterations=self.red_iter)
-            red_count_edge = cv2.countNonZero(red_mask_edge)
-
-            blue_mask_edge = cv2.inRange(ROI_img_edge, self.blue_low, self.blue_up)
-            blue_mask_edge = cv2.erode(blue_mask_edge, None, iterations=self.blue_iter)
-            blue_mask_edge = cv2.dilate(blue_mask_edge, None, iterations=self.blue_iter)
-            blue_count_edge = cv2.countNonZero(blue_mask_edge)
-
-            edge_color_counts = {"red": red_count_edge, "blue": blue_count_edge}
-            max_edge_color = max(edge_color_counts, key=edge_color_counts.get)
-            print(f"边缘检测到颜色: {max_edge_color}")
-
             if max_edge_color == "red":
                 color = 1
             elif max_edge_color == "blue":
@@ -178,25 +172,23 @@ class Detect_object:
         else:
             hollow = 1
             print("实心")
-            if max_color == "red":
+            if max_edge_color == "red":
                 color = 1
-            elif max_color == "blue":
+            elif max_edge_color == "blue":
                 color = 2
 
         return hollow, color
 
 if __name__ == "__main__":
-    for z in range(43, 44):
         detector = Detect_object()
-        img = cv2.imread("D:\\table\\berryPI\\photo\\" + str(z) + ".jpg")
+        img = cv2.imread("D:\\table\\berryPI\\photo\\11.jpg")
         results = []
         i = 0
-        while i < 40:
+        while i < 33:
             i += 1
             shape1, hollow, color = detector.detect_shape_color(img)
-            if shape1 is not None and hollow is not None and color is not None:
-                results.append((shape1, hollow, color))
-                print(f"形状: {shape1}, 空心: {hollow}, 颜色: {color}")
+            results.append((shape1, hollow, color))
+            print(f"形状: {shape1}, 空心: {hollow}, 颜色: {color}")
             time.sleep(0.1)
             if cv2.waitKey(1) == 27:
                 break
