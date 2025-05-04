@@ -11,10 +11,8 @@ class Detect_object:
         self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
         self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
         self.area_min = 10000
-        self.rectangle_thresh = 60
-        self.up_trapezoid_thresh = 50
-        self.down_trapezoid_thresh = 80
-        self.square_thresh = 30
+        self.rectangle_thresh = 70
+        self.square_thresh = 40
         self.canny_threshold1 = 50
         self.canny_threshold2 = 88
         self.roi_x = 5
@@ -35,10 +33,6 @@ class Detect_object:
     def init_trackbars(self):
         cv2.namedWindow("Parameters")
         cv2.createTrackbar("Area Min", "Parameters", self.area_min, 50000, self.nothing)
-        cv2.createTrackbar("Rectangle Thresh", "Parameters", self.rectangle_thresh, 200, self.nothing)  # 修正了这里的名称拼写错误
-        cv2.createTrackbar("Up Trapezoid Thresh", "Parameters", self.up_trapezoid_thresh, 100, self.nothing)
-        cv2.createTrackbar("Down Trapezoid Thresh", "Parameters", self.down_trapezoid_thresh, 100, self.nothing)
-        cv2.createTrackbar("Square Thresh", "Parameters", self.square_thresh, 50, self.nothing)
         cv2.createTrackbar("Canny Thresh1", "Parameters", self.canny_threshold1, 200, self.nothing)  # 修正了这里的名称拼写错误
         cv2.createTrackbar("Canny Thresh2", "Parameters", self.canny_threshold2, 200, self.nothing)
 
@@ -47,10 +41,6 @@ class Detect_object:
 
     def update_parameters(self):
         self.area_min = cv2.getTrackbarPos("Area Min", "Parameters")
-        self.rectangle_thresh = cv2.getTrackbarPos("Rectangle Thresh", "Parameters")
-        self.up_trapezoid_thresh = cv2.getTrackbarPos("Up Trapezoid Thresh", "Parameters")
-        self.down_trapezoid_thresh = cv2.getTrackbarPos("Down Trapezoid Thresh", "Parameters")
-        self.square_thresh = cv2.getTrackbarPos("Square Thresh", "Parameters")
         self.canny_threshold1 = cv2.getTrackbarPos("Canny Thresh1", "Parameters")
         self.canny_threshold2 = cv2.getTrackbarPos("Canny Thresh2", "Parameters")
 
@@ -85,6 +75,34 @@ class Detect_object:
                 perimeter = cv2.arcLength(cnt, True)
                 approx = cv2.approxPolyDP(cnt, 0.02 * perimeter, True)  # 调整了轮廓近似精度
 
+            #    A
+            #   / \
+            #  B---C
+                if len(approx) == 3:
+                    shape_type = "三角形"
+                    mu = cv2.moments(cnt)
+                    center_x = int(mu["m10"] / mu["m00"]) if mu["m00"] != 0 else 0
+                    center_y = int(mu["m01"] / mu["m00"]) if mu["m00"] != 0 else 0
+                    print(f"三角形中心: ({center_x}, {center_y})")
+                    # 获取三个顶点
+                    pts = approx.squeeze()  # 形状应为(3,2)
+                    # 方法一：直接按原始顺序访问
+                    A = pts[0]  # 第一个顶点 [x0,y0]
+                    B = pts[1]  # 第二个顶点 [x1,y1]
+                    C = pts[2]  # 第三个顶点 [x2,y2]
+                    y_coords = pts[:, 1]    # 所有y坐标
+                    sorted_idx = np.argsort(y_coords)
+                    top_point = pts[sorted_idx[0]]  # y最小的点
+                    bottom_point = pts[sorted_idx[2]] # y最大的点 好像没用到
+                    # 判断三角形朝向
+                    if y_coords[0] < y_coords[1] and y_coords[0] < y_coords[2]:
+                        shape_type = "上三角"  # 有一个顶点明显在上方
+                        hollow, color = self.detect_color(img_blur, center_x, center_y, int[top_point[0]], int[top_point[1]])
+                    elif y_coords[0] > y_coords[1] and y_coords[0] > y_coords[2]:
+                        shape_type = "下三角"  # 有一个顶点明显在下方
+                        hollow, color = self.detect_color(img_blur, center_x, center_y, int[bottom_point[0]], int[bottom_point[1]])
+                    else:
+                        shape_type = "其他三角形"##66666
                 if len(approx) == 4:
                     x, y, w, h = cv2.boundingRect(approx)
                     center_x = x + w / 2
@@ -94,6 +112,12 @@ class Detect_object:
                     center_y_mu = int(mu["m01"] / mu["m00"]) if mu["m00"] != 0 else 0
                     approx = np.array(approx).squeeze()
                     sorted_points = approx[np.argsort(approx[:, 1])]
+
+                    
+                    # A —— B
+                    # |    |
+                    # D —— C
+
                     if sorted_points[0][0] <= sorted_points[1][0]:
                         A = sorted_points[0]
                         B = sorted_points[1]
@@ -101,24 +125,26 @@ class Detect_object:
                         A = sorted_points[1]
                         B = sorted_points[0]
                     if sorted_points[2][0] <= sorted_points[3][0]:
-                        C = sorted_points[2]
-                        D = sorted_points[3]
-                    else:
-                        C = sorted_points[3]
                         D = sorted_points[2]
+                        C = sorted_points[3]
+                    else:
+                        D = sorted_points[3]
+                        C = sorted_points[2]
+                    print(A,B,C,D)
                     AB = int(np.sqrt((A[0]-B[0])**2 + (A[1]-B[1])**2))
                     CD = int(np.sqrt((C[0]-D[0])**2 + (C[1]-D[1])**2))
                     AC = int(np.sqrt((A[0]-C[0])**2 + (A[1]-C[1])**2))
                     AD = int(np.sqrt((A[0]-D[0])**2 + (A[1]-D[1])**2))
 
-                    angle_AB_CD = np.abs(np.arctan2(B[1]-A[1], B[0]-A[0]) - np.arctan2(D[1]-C[1], D[0]-C[0]))
-                    angle_AC_BD = np.abs(np.arctan2(C[1]-A[1], C[0]-A[0]) - np.arctan2(D[1]-B[1], D[0]-B[0]))
-                    
-                    if AB - AC > self.rectangle_thresh and CD - AD > self.rectangle_thresh:
+                    angle_AB_CD = np.abs(np.arctan2(B[1]-A[1], B[0]-A[0]) - np.arctan2(C[1]-D[1], C[0]-D[0]))
+                    angle_AB_AD = np.abs(np.arctan2(B[1]-A[1], B[0]-A[0]) - np.arctan2(D[1]-A[1], D[0]-A[0]))
+                    print(angle_AB_AD,angle_AB_CD)
+                    ###矩形和正方形各成检测对，梯形检测使用角度判断，精度很高
+                    if AB - AD > self.rectangle_thresh and CD - AD > self.rectangle_thresh:
                         shape_type = "矩形"
-                    elif min(angle_AB_CD, angle_AC_BD) < np.pi/18 and CD > AB:
+                    elif angle_AB_CD < np.pi/18 and angle_AB_AD >np.pi/1.8:
                         shape_type = "上梯形"
-                    elif min(angle_AB_CD, angle_AC_BD) < np.pi/18 and CD < AB:
+                    elif angle_AB_CD < np.pi/18 and angle_AB_AD < np.pi/2.25 :
                         shape_type = "下梯形"
                     elif AB - AC <= self.square_thresh and CD - AD <= self.square_thresh:
                         shape_type = "正方形"
@@ -198,11 +224,11 @@ def capture_frame(self):
     return ret,frame
 if __name__ == "__main__":
     detector = Detect_object()
-    img = cv2.imread("D:/table/berryPI/photo/29.jpg")  # 使用正斜杠路径更安全
+    img = cv2.imread("D:/table/berryPI/photo/2.jpg")  # 使用正斜杠路径更安全
 
     results = []
     i = 0
-    while i < 33:
+    while i < 37:
         # 添加窗口显示和退出检测
         cv2.imshow("Detection Preview", img)
         if cv2.waitKey(1) == 27:  # ESC退出
