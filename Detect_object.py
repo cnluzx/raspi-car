@@ -3,6 +3,8 @@ import numpy as np
 import time
 from collections import Counter
 
+global frame_count
+frame_count = 0
 class Detect_object:
     def __init__(self):
         self.if_shape_test = True
@@ -11,8 +13,8 @@ class Detect_object:
         self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
         self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
         self.area_min = 10000
-        self.rectangle_thresh = 70
-        self.square_thresh = 40
+        self.rectangle_thresh = 66
+        self.square_thresh = 38
         self.canny_threshold1 = 50
         self.canny_threshold2 = 88
         self.roi_x = 5
@@ -21,13 +23,13 @@ class Detect_object:
         self.roi_h = 5
         self.ROI_range = 50
         self.red_low = (0, 0, 100)
-        self.red_up = (50, 50, 255)  # 修正了这里的括号问题
+        self.red_up = (50, 50, 255)  # 调阈值
         self.blue_low = (100, 0, 0)
         self.blue_up = (255, 50, 50)
         self.red_iter = 1
         self.blue_iter = 1
         self._threold = 50
-        self.frame_count = 0
+
         self.init_trackbars()
 
     def init_trackbars(self):
@@ -138,7 +140,7 @@ class Detect_object:
 
                     angle_AB_CD = np.abs(np.arctan2(B[1]-A[1], B[0]-A[0]) - np.arctan2(C[1]-D[1], C[0]-D[0]))
                     angle_AB_AD = np.abs(np.arctan2(B[1]-A[1], B[0]-A[0]) - np.arctan2(D[1]-A[1], D[0]-A[0]))
-                    print(angle_AB_AD,angle_AB_CD)
+                    print(angle_AB_AD*180/np.pi,angle_AB_CD*180/np.pi)
                     ###矩形和正方形各成检测对，梯形检测使用角度判断，精度很高
                     if AB - AD > self.rectangle_thresh and CD - AD > self.rectangle_thresh:
                         shape_type = "矩形"
@@ -207,25 +209,25 @@ class Detect_object:
         return hollow, color
 
 
-def capture_frame(self):
+def capture_frame():
     
-    if not self.cap.isOpened():
+    if not detector.cap.isOpened():
         print("无法打开摄像头")
         exit()
-    ret,frame=self.cap.read()
+    ret,frame=detector.cap.read()
    
     if ret:
         
-        cv2.imwrite("captured_frame"+str(self.frame_count)+".jpg", frame)  # 保存为jpg格式
-        self.frame_count += 1
-        print("图像已保存为 captured_frame+x.jpg")
-    self.cap.release()
+        cv2.imwrite("captured_frame"+str(frame_count)+".jpg", frame)  # 保存为jpg格式
+        detector.frame_count += 1
+    detector.cap.release()
     cv2.destroyAllWindows()
-    return ret,frame
-if __name__ == "__main__":
-    detector = Detect_object()
-    img = cv2.imread("D:/table/berryPI/photo/2.jpg")  # 使用正斜杠路径更安全
+    return ret,frame,frame_count
 
+def main(img):
+    most_common_shape=None
+    most_common_hollow=None
+    most_common_color=None
     results = []
     i = 0
     while i < 37:
@@ -275,8 +277,19 @@ if __name__ == "__main__":
                 Shape = 8
         else:
             Shape = None
-
+        
         print(f"最终的形状: {most_common_shape}, 最终的空心: {most_common_hollow}, 最终的颜色: {most_common_color}")
         print(f"最终确定的形状代号: {Shape}")
+        return True,most_common_shape,most_common_hollow,most_common_color
     else:
         print("没有检测到有效的形状和颜色")
+        return False,None,None,None
+    
+
+
+if __name__ == '__main__':
+    detector = Detect_object()
+    img = cv2.imread("D:/table/berryPI/photo/17.jpg")  # test image
+   #img = cv2.imread("captured_frame"+str(detector.frame_count)+".jpg")
+    main(img)
+    
