@@ -58,10 +58,10 @@ def read_ID_thread():
         data=serial_send.read_data()
 
         if if_ID_head(data):
-            ID=read_text(data)##读取ID
-            OLED.show_text(ID)##显示ID
-            id_sounder=Boardcast()
-            id_sounder.ID(ID)##广播ID
+            id=read_text(data)##读取ID
+            OLED.show_text(id)##显示ID
+            id_sounder=Boardcast.Board_cast()
+            id_sounder.ID(id)##广播ID
             if_read_ID_thread=True
         time.sleep(0.1)
 
