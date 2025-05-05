@@ -5,7 +5,7 @@ import pygame
 ##此文件主要目的是播放检测到的形状、颜色、声音文件
 ##会继续修改，根据检测能力修改
 ####################    
-class Boardcast:
+class Board_cast:
     def __init__(self):
         pygame.mixer.init()
     
