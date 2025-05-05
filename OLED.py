@@ -6,7 +6,7 @@ from luma.oled.device import ssd1306, ssd1325, ssd1331, sh1106
 from time import sleep
 """
 OLED luma 驱动库测试程序
-功能：显示 hello world 和矩形外框持续10秒
+功能：显示 test 和矩形外框持续3秒
 """
 __version__ = 1.0
 # 初始化端口
@@ -18,7 +18,9 @@ print("当前版本：", __version__)
 def show_text(text):
     with canvas(device) as draw:
         draw.rectangle(device.bounding_box, outline="white", fill="black")
-        draw.text((30, 20), "Hello World", fill="white")
-# 延时显示10s
-sleep(10)
+        draw.text((30, 20), text, fill="white")
+        sleep(3)
+# 延时显示3s
+
+
 
