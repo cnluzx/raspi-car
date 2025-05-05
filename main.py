@@ -24,6 +24,10 @@ route_steps = [
     "moving_ahead",
     "turn_left",
     "moving_ahead",
+    "turn_left",
+    "moving_ahead",
+    "turn_right",
+    "moving_ahead",
     "turn_right",
     "moving_ahead"
 ]
