@@ -5,6 +5,7 @@ import OLED
 import time
 import Detect_object
 import PWM
+import cv2
 
 if_read_ID_thread = False
 serial_lock = threading.Lock()
@@ -110,12 +111,11 @@ def handle_object_detection():
     """处理物体检测逻辑"""
     pan = PWM.PAN()
     pan.Pan_left()
-    Detect_object.capture_frame()
-    if_detect, shape, hollow, color = Detect_object.main()
-    
+    ret,frame,frame_count=Detect_object.capture_frame()
+    if_detect, shape, hollow, color = Detect_object.main(frame)
     if not if_detect:
         pan.Pan_right()
-        if_detect, shape, hollow, color = Detect_object.main()
+        if_detect, shape, hollow, color = Detect_object.main(frame)
     
     display_text = f"{shape} {hollow} {color}" if if_detect else "No object detected."
     OLED.show_text(display_text)
