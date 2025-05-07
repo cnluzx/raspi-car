@@ -33,15 +33,15 @@ class PAN():
         time.sleep(0.5)
         pwm.stop()
 
-    def Pan_left(self,angle):
+    def Pan_left(self,angle=120):
         self.set_angle(self.pin_1,0)
         self.set_angle(self.pin_2,angle)
 
-    def Pan_right(self,angle):
+    def Pan_right(self,angle=120):
         self.set_angle(self.pin_1,180)
         self.set_angle(self.pin_2,angle)
 
-    def Pan_center(self,angle):
+    def Pan_center(self,angle=120):
         self.set_angle(self.pin_1,90)
         self.set_angle(self.pin_2,angle)
         
