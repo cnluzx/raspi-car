@@ -50,19 +50,24 @@ def execute_step(step):
 
                 if  if_ID_head(data):
                     ID=read_text(data)##读取ID
+                    print(ID)##输出检测到的ID
                     #OLED.show_text(ID)##显示ID
-                    break
-                
+                    continue
+
                 elif if_task_finish_head(data):
-                    serial_send.stop()
+                    #serial_send.stop()
                     if_moving = False
                     break
 
                 elif if_color_head(data):
                     serial_send.stop()
                     if_moving = False
-                    handle_object_detection()  # 将物体检测逻辑提取为单独函数
-                    break
+                    if_ret, display_text = handle_object_detection()
+                    if if_ret:
+                        print(display_text)
+                        serial_send.move_ahead()
+                        #OLED.show_text(display_text)##显示物体检测结果
+                    continue
                 
                 time.sleep(0.1)
                 
@@ -103,6 +108,7 @@ def handle_object_detection():
         if_detect, shape, hollow, color = Detect_object.main(frame)
     
     display_text = f"{shape} {hollow} {color}" if if_detect else "No object detected."
+    return if_detect, display_text  
     #OLED.show_text(display_text)
 
 def moving_thread():
