@@ -69,24 +69,25 @@ def execute_step(step):
     global if_moving
     try:
         if step == "moving_ahead":
-            with serial_lock:
-                serial_send.move_ahead()
+            serial_send.move_ahead()
             if_moving = True
             
             while if_moving:
-                with serial_lock:
-                    data = serial_send.read_data()
+
+                data = serial_send.read_data()
                 
-                if if_task_finish_head(data):
-                    with serial_lock:
-                        serial_send.stop()
+                if  if_ID_head(data):
+                    ID=read_text(data)##读取ID
+                    #OLED.show_text(ID)##显示ID
+
+                elif if_task_finish_head(data):
+                    serial_send.stop()
                     if_moving = False
                     print("Task finished, movement stopped.")
                     break
 
                 elif if_color_head(data):
-                    with serial_lock:
-                        serial_send.stop()
+                    serial_send.stop()
                     if_moving = False
                     handle_object_detection()  # 将物体检测逻辑提取为单独函数
                     break

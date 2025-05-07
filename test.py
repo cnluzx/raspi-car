@@ -47,13 +47,18 @@ def execute_step(step):
             
             while if_moving:
                 data = serial_send.read_data()
-                if if_task_finish_head(data):
+
+                if  if_ID_head(data):
+                    ID=read_text(data)##读取ID
+                    #OLED.show_text(ID)##显示ID
+                    break
+                
+                elif if_task_finish_head(data):
                     serial_send.stop()
                     if_moving = False
                     break
 
                 elif if_color_head(data):
-    
                     serial_send.stop()
                     if_moving = False
                     handle_object_detection()  # 将物体检测逻辑提取为单独函数
@@ -63,7 +68,7 @@ def execute_step(step):
                 
         elif step == "turn_right":
             serial_send.turn_right()
-            while if_moving:  # 保持1秒延时
+            while if_moving:  
                 data=serial_send.read_data()
                 print(data)##测试串口数据
                 if if_task_finish_head(data):
@@ -72,7 +77,7 @@ def execute_step(step):
         elif step == "turn_left":
             serial_send.turn_left()
             if_moving = True
-            while if_moving:  # 保持1秒延时
+            while if_moving:  
                 data=serial_send.read_data()
                 print(data)##测试串口数据
                 if if_task_finish_head(data):
@@ -81,7 +86,7 @@ def execute_step(step):
     except Exception as e:
         print(f"Error in execute_step: {str(e)}")
         if_moving = True
-        while if_moving:  # 保持1秒延时
+        while if_moving: 
             data=serial_send.stop()
             print(data)##测试串口数据
             if if_task_finish_head(data):
