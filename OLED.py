@@ -19,7 +19,11 @@ def show_text(text):
     with canvas(device) as draw:
         draw.rectangle(device.bounding_box, outline="white", fill="black")
         draw.text((30, 20), text, fill="white")
-        sleep(3)
+    sleep(3)
+    device.command(0xAE) # 关闭显示
+
+
+
 # 延时显示3s
 
 
