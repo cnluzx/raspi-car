@@ -41,15 +41,18 @@ def if_task_finish_head(data):
     
 def if_color_head(data):
     return data[0]=="#"
+
+
+
 #ID:$|12|
-def read_text(messages):
-    #找到第一个'|'
-    index = messages.find('|')
-    #找到第二个'|'
-    index2 = messages.find('|',index+1)
-    #拿到两个|之间的数据
-    text = int(messages[index+1:index2])
-    return text
+# def read_text(messages):
+#     #找到第一个'|'
+#     index = messages.find('|')
+#     #找到第二个'|'
+#     index2 = messages.find('|',index+1)
+#     #拿到两个|之间的数据
+#     text = int(messages[index+1:index2])
+#     return text
 
 def read_ID_thread():
     global if_read_ID_thread
@@ -58,11 +61,11 @@ def read_ID_thread():
         data=serial_send.read_data()
 
         if if_ID_head(data):
-            ID=read_text(data)##读取ID
-            OLED.show_text(ID)##显示ID
-            id_sounder=Boardcast.Board_cast()
-            id_sounder.ID(ID)##广播ID
-            if_read_ID_thread=True
+            ID=(data)##读取ID
+           # OLED.show_text(ID)##显示ID
+           # id_sounder=Boardcast.Board_cast()
+            #id_sounder.ID(ID)##广播ID
+           # if_read_ID_thread=True
         time.sleep(0.1)
 
 def execute_step(step):
@@ -73,16 +76,15 @@ def execute_step(step):
             if_moving = True
             
             while if_moving:
-
                 data = serial_send.read_data()
                 
                 if  if_ID_head(data):
-                    ID=read_text(data)##读取ID
+                    #ID=read_text(data)##读取ID
                     #OLED.show_text(ID)##显示ID
 
                 elif if_task_finish_head(data):
                     serial_send.stop()
-                    if_moving = False
+                    if_moving = False3
                     print("Task finished, movement stopped.")
                     break
 

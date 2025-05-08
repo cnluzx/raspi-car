@@ -9,14 +9,14 @@ class Detect_object:
     def __init__(self):
         self.if_shape_test = True
         self.if_color_test = True
-        self.cap = cv2.VideoCapture(0, cv2.CAP_V4L2)
+        self.cap = cv2.VideoCapture(0)
         self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
         self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
         self.area_min = 10000
         self.rectangle_thresh = 66
         self.square_thresh = 38
         self.canny_threshold1 = 50
-        self.canny_threshold2 = 88
+        self.canny_threshold2 = 100
         self.roi_x = 5
         self.roi_y = 5
         self.roi_w = 5
@@ -28,7 +28,7 @@ class Detect_object:
         self.blue_up = (255, 50, 50)
         self.red_iter = 1
         self.blue_iter = 1
-        self._threold = 50
+        self._threold = 70
 
         self.init_trackbars()
 
@@ -56,7 +56,7 @@ class Detect_object:
         img_median = cv2.medianBlur(img_gray, 5)
         self._threold += 2
         if self._threold > 170:
-            self._threold = 50
+            self._threold = 70
         ret, img_two = cv2.threshold(img_gray, self._threold, 255, cv2.THRESH_BINARY_INV)
         img_canny = cv2.Canny(img_two, self.canny_threshold1, self.canny_threshold2)
         kernel = np.ones((5, 5))
@@ -218,11 +218,10 @@ def capture_frame():
    
     if ret:
         
-        cv2.imwrite("captured_frame"+str(frame_count)+".jpg", frame)  # 保存为jpg格式
-        detector.frame_count += 1
+        cv2.imwrite("captured_frame.jpg", frame)  # 保存为jpg格式
     detector.cap.release()
     cv2.destroyAllWindows()
-    return ret,frame,frame_count
+    return ret,frame
 
 def main(img):
     most_common_shape=None
@@ -289,7 +288,6 @@ def main(img):
 
 if __name__ == '__main__':
     detector = Detect_object()
-    img = cv2.imread("D:/table/berryPI/photo/17.jpg")  # test image
-   #img = cv2.imread("captured_frame"+str(detector.frame_count)+".jpg")
+    img = cv2.imread("frame.jpg")
     main(img)
     
