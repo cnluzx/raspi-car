@@ -209,19 +209,19 @@ class Detect_object:
         return hollow, color
 
 
-def capture_frame():
+# def capture_frame():
     
-    if not detector.cap.isOpened():
-        print("无法打开摄像头")
-        exit()
-    ret,frame=detector.cap.read()
+#     if not detector.cap.isOpened():
+#         print("无法打开摄像头")
+#         exit()
+#     ret,frame=detector.cap.read()
    
-    if ret:
+#     if ret:
         
-        cv2.imwrite("captured_frame.jpg", frame)  # 保存为jpg格式
-    detector.cap.release()
-    cv2.destroyAllWindows()
-    return ret,frame
+#         cv2.imwrite("captured_frame.jpg", frame)  # 保存为jpg格式
+#     detector.cap.release()
+#     cv2.destroyAllWindows()
+#     return ret,frame
 
 def main(img):
     most_common_shape=None
