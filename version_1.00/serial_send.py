@@ -1,9 +1,11 @@
 import serial
 
-ser = serial.Serial(
-        port='COM8',
-        baudrate=115200,
-    )       
+ser=serial.Serial()
+ser.BAUDRATES=115200
+ser.port="/dev/ttyUSB0"
+ser.open()
+
+
 def send_data(data):
     ser.write(data.encode('utf-8'))
 
@@ -27,3 +29,4 @@ def turn_right():
 
 def stop():
     send_data("1|0|0")
+
