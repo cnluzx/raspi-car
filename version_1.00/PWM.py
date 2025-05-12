@@ -21,9 +21,13 @@ class PAN():
     def __init__(self): 
         self.pin_1 = 18 
         self.pin_2 = 13
+        self.pin_light =4
         GPIO.setmode(GPIO.BCM)
         GPIO.setup(self.pin_1,GPIO.OUT)
         GPIO.setup(self.pin_2,GPIO.OUT)
+        GPIO.setup(self.pin_light,GPIO.OUT)
+        GPIO.output(self.pin_light,GPIO.HIGH)
+
 
     def set_angle(self,pin,angle):
         pwm=GPIO.PWM(pin,50)
