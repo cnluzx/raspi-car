@@ -25,7 +25,7 @@ def pan_left(angle=120):
     set_angle(pin_2,angle)
 
 def pan_right(angle=120):
-    set_angle(pin_1,180)
+    set_angle(pin_1,170)
     set_angle(pin_2,angle)
 
 def pan_center(angle=120):

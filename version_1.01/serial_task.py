@@ -3,6 +3,8 @@ import serial
 ser = serial.Serial(
         port='/dev/ttyUSB0',  # 替换为你的串口号
         baudrate=115200,
+        timeout=0
+        
     )       
 def send_data(data):
     ser.write(data.encode('utf-8'))
