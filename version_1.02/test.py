@@ -219,6 +219,10 @@ class CarMove(Serial):
         else:
             print(f"未知步骤: {step_name}")
 
+    def execute_route(self):
+        
+        print(f"开始执行路由，共 {len(self.route_steps)} 个步骤")
+
 
 
 class Boardcast():
