@@ -1,5 +1,4 @@
 import RPi.GPIO as GPIO
-import time
 ############################
 ##树莓派连接云台完成
 ##使用方式：1.装RPI库，如果初始的使用的是树莓派官方的系统则不用安装（    sudo apt-get update    sudo apt-get install python-rpi.gpio）
@@ -16,32 +15,35 @@ import time
 ##########################
 
 ##现在有个bug 使用的是360度的舵机，逻辑上有差异，需要修改
-class PAN():
 
-    def __init__(self): 
-        self.pin_1 = 18 
-        self.pin_2 = 13
-        GPIO.setmode(GPIO.BCM)
-        GPIO.setup(self.pin_1,GPIO.OUT)
-        GPIO.setup(self.pin_2,GPIO.OUT)
+pin_1= 18   
+pin_2 =13
+pin_light= 4 
+GPIO.setmode(GPIO.BCM)
+GPIO.setup(pin_1,GPIO.OUT)
+GPIO.setup(pin_2,GPIO.OUT)
+GPIO.setup(pin_light,GPIO.OUT)
 
-    def set_angle(self,pin,angle):
-        pwm=GPIO.PWM(pin,50)
-        pwm.start(0)
-        duty=2+angle/18
-        pwm.ChangeDutyCycle(duty)
-        time.sleep(0.5)
-        pwm.stop()
+def light_on():
+    GPIO.output(pin_light,GPIO.HIGH)
 
-    def Pan_left(self,angle=120):
-        self.set_angle(self.pin_1,0)
-        self.set_angle(self.pin_2,angle)
+def set_angle(pin,angle):
+    pwm=GPIO.PWM(pin,50)
+    pwm.start(0)
+    duty=2+angle/18
+    pwm.ChangeDutyCycle(duty)
+    time.sleep(0.5)
+    pwm.stop()
 
-    def Pan_right(self,angle=120):
-        self.set_angle(self.pin_1,170)
-        self.set_angle(self.pin_2,angle)
 
-    def Pan_center(self,angle=120):
-        self.set_angle(self.pin_1,90)
-        self.set_angle(self.pin_2,angle)
-#
+def pan_left(angle=120):
+    set_angle(pin_1,0)
+    set_angle(pin_2,angle)
+
+def pan_right(angle=120):
+    set_angle(pin_1,170)
+    set_angle(pin_2,angle)
+
+def pan_center(angle=120):
+    set_angle(pin_1,90)
+    set_angle(pin_2,angle)

@@ -9,127 +9,150 @@ import time
 import pygame
 import pwm
 from collections import Counter
-####已完成，无问题的模块会打######
-####模块列表：########################################################
-####1.oled.py  OLED显示模块  太多导入就单独一个文件了
-####2.Serial_test类  串口通信模块
-####3.CarMove类  车辆控制模块
-####4.detect 类  传统图像检测模块
-####5.boardcast 类  语音播报模块
-####6.pwm.py  舵机控制模块
-##################################################################################
-###现在的任务：
-####使用到的标志位:stop_flag 停止标志位
-####detection_triggered 检测任务触发标志
-####detection_completed 检测任务完成标志
 
-###重要的参数：current_step 当前执行的步骤
-###
 
-global response
-class SerialTest:
+###read_stream 会在读取到数据时触发read_command，并返回数据
+###stop_event 停止信号
+###id_event 识别信号
+###detection_event 检测信号
+class Serial:
     def __init__(self, port, baudrate):
-        self.ser = serial.Serial(port, baudrate, timeout=1)
-        self.stop_event = threading.Event()  # 使用Event对象控制线程
+        self.ser=serial.Serial(port, baudrate, timeout=0.5)
+        self.data  = None
         self.step = 0
-        self.detection_triggered = threading.Event()  # 检测任务触发标志
-        self.detection_completed = threading.Event()  # 检测任务完成标志
-        self.current_step = None  # 记录当前执行的步骤
-        self.id_trigger = threading.Event()  # 记录ID触发标志 # 用于存储串口响应
-    def _send_command(self, command):######
+        self.current_step = 0
+
+        self.stop_event = threading.Event()
+        self.id_event = threading.Event()
+        self.detection_event = threading.Event()
+    def send_command(self, command):
         if self.ser.is_open:
             self.ser.write(command.encode())
 
-    def _read_response(self):#########
+    def read_command(self):
         try:
-            if self.ser.is_open:
-                response = self.ser.readline()
-                if response:  # 检查是否有数据返回
-                    return response.decode("utf-8").replace("\x00", "").strip()
+            if self.ser.in_waiting:
+                data =self.ser.readline()
+                if data:
+                    return data.decode("utf-8").replace("\x00", "").strip()
             return None
         except Exception as e:
             print(f"串口读取错误: {e}")
             return None
-    def ReadStream(self):
-        while not self.stop_event.is_set():
+    
+    def read_stream(self):
+        while not self.stop_event.is_set() and self.ser.is_open:
             try:
-                self.response = self._read_response()
-                if self.response:
-                    print(f"收到响应: {self.response}")
-                    if self.response == "#":
-                        self.step += 1
-                        print(f"当前步骤: {self.step}")
-                        self.stop_flag = True
-                    elif self.response == "!" and self.current_step == "moving_ahead":
-                        # 当检测到!且当前正在直走时，触发检测任务
-                        print("触发检测任务！")
-                        self.detection_triggered.set()
+                self.data = self.read_command()
+                if self.data:
+                    if self.data   == "#":
+                        print("触发停止信号！")
+                        self.stop_event.set()
 
-                    elif self.response[0] == "@":
-                        print(f"检测到ID: {self.response[2:]}")
-                        self.id_trigger.set()
+                    elif self.data == "!" and self.current_step == "moving_ahead":
+                        print("触发检测任务！")
+                        self.detection_event.set()
+
+                    elif self.data == "@" :
+                        print("触发识别任务！")
+                        self.id_event.set()
+
                 time.sleep(0.01)
             except Exception as e:
-                print(f"读取线程异常: {e}")
-                time.sleep(0.5)  # 发生异常时暂停                time.sleep(0.5)  # 发生异常时暂停一段时间
+                print(f"串口读取错误: {e}")
+                time.sleep(0.5)
 
-    def ReadThread(self):
-        read_thread = threading.Thread(target=self.ReadStream)
-        read_thread.daemon = True
+    def detection_stream(self):
+        if self.detection_event.is_set():
+            sound= Boardcast()
+            object=Detect()
+            pwm.pan_left()
+            time.sleep(1)
+
+            img=object.capture_frame_save()
+            ret,shape,hollow,color=object.main(img)
+            if ret:
+                oled.show_test(shape,hollow,color)
+                sound.test()
+                print("检测到物体")
+            else:
+                pwm.pan_right()
+                time.sleep(1)
+                img=object.capture_frame_save()
+                ret,shape,hollow,color=object.main(img)
+                if ret:
+                    oled.show_test(shape,hollow,color)
+                    sound.test()
+
+                else:
+                    pwm.pan_center()
+                    time.sleep(1)
+                    print("未检测到物体")
+            self.detection_event.clear()
+
+    def id_stream(self):
+        if self.id_event.is_set():
+            id=self.data[3:]
+            oled.show_text(f"识别结果：{id}")
+            self.id_event.clear()
+
+    def read_thread(self):
+        read_thread = threading.Thread(target=self.read_stream)
         read_thread.start()
-        return read_thread  # 返回线程对象以便后续操作
-
+        return read_thread
+    
+    def detection_thread(self):
+        detection_thread = threading.Thread(target=self.detection_stream)
+        detection_thread.start()
+        return detection_thread
+    
     def id_thread(self):
-        if self.id_trigger.is_set():
-            id=response[3:]
-            oled.show_test(id)
-        self.id_trigger.clear()
+        id_thread = threading.Thread(target=self.id_stream)
+        id_thread.start()
+        return id_thread
 
     def close(self):
-        """安全关闭串口和线程"""
-        self.stop_event.set()  # 通知线程停止
-        self.detection_triggered.set()  # 确保不会阻塞
-        self.detection_completed.set()  # 确保不会阻塞
-        self.id_trigger.set()
-        time.sleep(0.1)  # 给线程时间处理停止请求
-        if self.ser.is_open:
+        self.stop_event.clear()
+        self.detection_event.clear()
+        self.id_event.clear()
+        time.sleep(0.5)
+        if self.ser.is_open:    
             self.ser.close()
-            print("串口已关闭")
+            print("串口关闭！")
 
-class CarMove(SerialTest):######继承于SerialTest类 
+
+class CarMove(Serial):
 
     def __init__(self, port, baudrate):
         super().__init__(port, baudrate)
+        self.paused_step = 0
         self.route_steps = [
             "moving_ahead", "turn_left", "moving_ahead", "turn_right",
             "moving_ahead", "turn_right", "moving_ahead", "turn_right",
             "moving_ahead", "turn_right", "moving_ahead", "turn_left",
             "moving_ahead", "turn_left", "moving_ahead"
         ]
-        self.stop_flag = False  # 步骤完成标志
-        self.detection_paused_step = None  # 记录检测任务暂停时的步骤
 
     def Turn(self, angle, val):######
         command = f"2|{angle}|{val}"
         print(f"发送命令: {command}")
-        self._send_command(command)
+        self.send_command(command)
     
     def ahead_appoint(self, centimeter, val):##########
         command = f"3|{centimeter}|{val}"
         print(f"发送命令: {command}")
-        self._send_command(command)
+        self.send_command(command)
 
     def moving_ahead(self, val):######
         command = f"1|{val}|0"
         print(f"发送命令: {command}")
-        self._send_command(command)
+        self.send_command(command)
 
     def stop(self):
-        """停止所有运动"""
         command = "4|0|0"
         print(f"发送命令: {command}")
-        self._send_command(command)
-
+        self.send_command(command)
+    
     def execute_step(self, step_name):#######动作组拆解翻译指令
         self.current_step = step_name
         print(f"执行动作: {step_name}")
@@ -144,70 +167,40 @@ class CarMove(SerialTest):######继承于SerialTest类
         elif step_name == "stop":
             self.stop()
 
-    def perform_detection(self):
-        """执行检测任务"""
-        sound= boardcast()
-        object=detect()
-        pwm.pan_left()
-        time.sleep(1)
-        img=object.capture_frame_save()
-        ret,shape,hollow,color=object.main(img)
-        if ret:
-            oled.show_test(shape,hollow,color)
-            sound.test()
-            print("检测到物体")
-        else:
-            pwm.pan_right()
-            time.sleep(1)
-            img=object.capture_frame_save()
-            ret,shape,hollow,color=object.main(img)
-            if ret:
-                oled.show_test(shape,hollow,color)
-                sound.test()
-
-            else:
-                pwm.pan_center()
-                time.sleep(1)
-                print("未检测到物体")
-        self.detection_completed.set() 
-
-
     def execute_route(self):
-        """执行完整路由，支持检测任务中断和恢复"""
         print(f"开始执行路由，共 {len(self.route_steps)} 个步骤")
         
-        while self.step < len(self.route_steps) and not self.stop_event.is_set():###未执行完任务组会等待
-            # 重置标志
-            self.stop_flag = False
-            self.detection_triggered.clear()
-            self.detection_completed.clear()
-            
+        # # 启动读取线程
+        # read_thread = self.read_thread()
+        # # 启动检测线程
+        # detection_thread = self.detection_thread()
+        # # 启动识别线程
+        # id_thread = self.id_thread()
+
+        while self.step < len(self.route_steps) and not self.stop_event.is_set():
             # 执行当前步骤 动作组翻译
             current_step = self.route_steps[self.step]
             print(f"执行步骤 {self.step + 1}/{len(self.route_steps)}: {current_step}")
             self.execute_step(current_step)
             
-            # 等待当前步骤完成或检测任务触发  当不是
-            while not self.stop_flag and not self.detection_triggered.is_set() and not self.stop_event.is_set():
+            # 等待当前步骤完成或检测任务触发
+            while not self.stop_event.is_set():
+                if self.detection_event.is_set():
+                    print(f"步骤 {self.step + 1} 被检测任务中断")
+                    self.paused_step = self.step  # 记录暂停的步骤
+                    # 等待检测任务完成
+                    self.detection_event.wait()
+                    # 恢复被中断的步骤
+                    print(f"恢复执行步骤 {self.step + 1}/{len(self.route_steps)}: {current_step}")
+                    self.execute_step(current_step)
+                    self.detection_event.clear()  # 重置触发标志
+                
+                if self.id_event.is_set():
+                    print("触发识别任务！")
+                    # 处理逻辑已经在 id_thread 中处理
+                    # self.id_event.clear()  # 清除识别任务标志
+
                 time.sleep(0.1)
-            
-            # 检查是否因检测任务触发而中断
-            if self.detection_triggered.is_set():
-                print(f"步骤 {self.step + 1} 被检测任务中断")
-                self.detection_paused_step = self.step  # 记录暂停的步骤
-                
-                # 执行检测任务（在单独线程中执行，避免阻塞主程序）
-                detection_thread = threading.Thread(target=self.perform_detection)
-                detection_thread.daemon = True
-                detection_thread.start()
-                
-                # 等待检测任务完成
-                self.detection_completed.wait()
-                
-                # 恢复被中断的步骤
-                print(f"恢复执行步骤 {self.step + 1}/{len(self.route_steps)}: {current_step}")
-                self.execute_step(current_step)
-                self.detection_triggered.clear()  # 重置触发标志
             
             # 步骤完成
             print(f"步骤 {self.step + 1} 完成")
@@ -216,7 +209,8 @@ class CarMove(SerialTest):######继承于SerialTest类
         
         print("路线执行完成")
         self.execute_step("stop")  # 确保停止
-class detect():
+
+class Detect():
     def __init__(self):
             self.if_shape_test = True
             self.if_color_test = True
@@ -243,7 +237,6 @@ class detect():
             self.blue_iter = 1
             self.yellow_iter = 1  # 添加黄色迭代次数
             self._threold = 70
-
             self.init_trackbars()
 
     def init_trackbars(self):
@@ -505,8 +498,10 @@ class detect():
             return True,most_common_shape,most_common_hollow,most_common_color
         else:
             print("没有检测到有效的形状和颜色")
-            return False,None,None,None        
-class boardcast():
+            return False,None,None,None       
+        
+
+class Boardcast():
     def __init__(self):
        pygame.mixer.init()
 
@@ -515,36 +510,22 @@ class boardcast():
         pygame.mixer.music.play()
             # 等待音乐播放完毕
         while pygame.mixer.music.get_busy():
-            pygame.time.Clock().tick(1)           
-
-# def capture_frame():
-    
-#     if not detector.cap.isOpened():
-#         print("无法打开摄像头").
-#         exit()
-#     ret,frame=detector.cap.read()
-   
-#     if ret:
-        
-#         cv2.imwrite("captured_frame.jpg", frame)  # 保存为jpg格式
-#     detector.cap.release()
-#     cv2.destroyAllWindows()
-#     return ret,frame
+            pygame.time.Clock().tick(1)   
 
 if __name__ == "__main__":
     car = None
     try:
-        car = CarMove('/dev/ttyUSB0', 115200)  
-        read_thread = car.ReadThread()  # 启动读取线程
-        car.id_thread()  # 启动ID读取线程
-        car.execute_route()  # 执行完整路由
-        
-        # 等待路由执行完成或用户中断
-        while read_thread.is_alive() and car.step < len(car.route_steps):
+        car = CarMove('/dev/ttyUSB0', 115200)
+        car.read_thread()
+        car.detection_thread()
+        car.id_thread()
+        car.execute_route()
+
+        while car.step < len(car.route_steps):
             time.sleep(0.5)
-            
+
     except KeyboardInterrupt:
         print("\n程序被用户中断")
     finally:
         if car:
-            car.close()  # 关闭串口和线程    
+            car.close()
