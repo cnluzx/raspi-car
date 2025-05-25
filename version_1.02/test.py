@@ -9,7 +9,7 @@ import pygame
 from collections import Counter
 import queue
 
-data_queue = queue.Queue(maxsize=100)  # 设置队列最大容量
+data_queue = queue.Queue(maxsize=1000)  # 设置队列最大容量
 detection_event = threading.Event()
 id_event = threading.Event()
 stop_event = threading.Event()
@@ -19,83 +19,150 @@ reading_thread= None  # 控制线程运行状态
 
 class Serial:
     def __init__(self, port, baudrate):
-        self.ser=serial.Serial(port="/dev/ttyUSB0", baudrate=115200, timeout=0.5)
-        self.current_data  = None
-        self.step = 0
-        self.current_step = 0
-        # 线程字典，便于管理
-        self.threads = 
+        self.current_data = None
+        # self.step = 0 
+        self.current_step = "idle" # 给一个初始状态
+        self.threads = {} # 正确初始化线程字典
+        self.id_data = None
+
+        try:
+            self.ser = serial.Serial(port=port, baudrate=baudrate, timeout=0.1) # 减小超时以便更快响应
+            print(f"串口 {port} 打开成功，波特率 {baudrate}")
+        except serial.SerialException as e:
+            print(f"打开串口 {port} 失败: {e}")
+            self.ser = None # 标记串口未成功打开
+            raise # 重新抛出异常，让调用者知道初始化失败
+
     def send_command(self, data):
-        if self.ser.is_open:
-            self.ser.write(data.encode('utf-8'))
-            time.sleep(0.1)
+        if self.ser and self.ser.is_open:
+            try:
+                self.ser.write((data).encode('utf-8'))
+                # print(f"已发送: {data}") # 调试用
+                time.sleep(0.05) # 发送后短暂延时，给设备处理时间，具体值可能需要调整
+            except serial.SerialException as e:
+                print(f"串口发送错误: {e}")
+            except Exception as e:
+                print(f"发送命令时发生未知错误: {e}")
+        else:
+            print("串口未打开或未初始化，无法发送命令。")
 
     def read_response(self):
+        if not self.ser or not self.ser.is_open:
+            return None
         try:
-            if self.ser.in_waiting:
-                response =self.ser.readline()
-                if response:
-                    return response.decode("utf-8").replace("\x00", "").strip()
+            if self.ser.in_waiting > 0: # 检查是否有等待读取的数据
+                response_bytes = self.ser.readline() # 读取一行数据
+                if response_bytes:
+                    # 解码并去除首尾空白及可能存在的空字节
+                    decoded_response = response_bytes.decode("utf-8", errors='ignore').strip()
+                    # print(f"原始读取: {decoded_response}") # 调试用
+                    return decoded_response
+            return None # 超时或没有读到数据
+        except serial.SerialException as e:
+            print(f"串口读取错误 (SerialException): {e}")
             return None
         except Exception as e:
-            print(f"串口读取错误: {e}")
+            print(f"串口读取时发生未知错误: {e}")
             return None
-        
+
     def put_queue_stream(self):
-        """从串口读取数据并放入队列"""
-        while running_thread_event.is_set():
+        """从串口读取数据并放入队列（独立线程）"""
+        print("串口读取线程已启动...")
+        while running_thread_event.is_set(): # 使用全局事件控制循环
+            if not self.ser or not self.ser.is_open:
+                print("串口读取线程：串口未连接，线程退出。")
+                break
             response = self.read_response()
-            if response and not data_queue.full():
-                data_queue.put(response)
-            time.sleep(0.01)  # 减少CPU使用率
+            if response: # 确保 response 不是 None 或空字符串
+                try:
+                    data_queue.put(response, timeout=0.1) 
+
+                except queue.Full:
+                    print("警告：数据队列已满，数据可能丢失。")
+            else:
+                time.sleep(0.01)
+        print("串口读取线程已停止。")
 
     def read_queue_stream(self):
+        """处理队列中的数据（独立线程）"""
+        print("数据处理线程已启动...")
         while running_thread_event.is_set():
-            if not data_queue.empty():
-                self.current_data = data_queue.get()   
-                if self.current_data   == "#":
-                    print("触发停止信号！")
-                    stop_event.set()
+            try:
+                self.current_data = data_queue.get(timeout=0.1) # 使用超时避免队列空时永久阻塞
 
-                elif self.current_data == "!" and self.current_step == "moving_ahead":
-                    print("触发检测任务！")
+                # CarMove 类可能会重写此方法以加入更具体的逻辑
+                if self.current_data.startswith("#"):
+                    print("处理：触发停止信号！")
+                    stop_event.set()
+                # 注意: self.current_step 的值需要被正确管理
+                elif self.current_data.startswith("STOP OVER!"):
+                    print("处理：触发检测任务！")
                     detection_event.set()
 
-                elif self.current_data == "@" :
-                    print("触发识别任务！")
-                    id_event.set()
-            time.sleep(0.01)
+                elif self.current_data.startswith("@"): # 假设ID数据以@开头
+                    print(f"处理：触发识别任务！数据: {self.current_data}")
+                    self.id_data=self.current_data[1:] # 去掉@符号
+                    id_event.set() # 通知 id_stream 处理
+                else:
+                    print(f"处理：收到未识别数据: {self.current_data}")
 
-    # 定义一个id_thread方法
+                #data_queue.task_done() # 通知队列任务已完成
+            except queue.Empty:
+                continue # 队列为空，继续等待
+            except Exception as e:
+                print(f"处理队列数据时出错: {e}")
+
+        print("数据处理线程已停止。")
+
     def id_stream(self):
-        """识别任务处理线程"""
+        """识别任务处理线程 (只保留一个定义)"""
+        print("ID处理线程已启动...")
         while running_thread_event.is_set():
-            # 等待识别事件触发
-            if id_event.wait(1):  # 添加超时，避免永久阻塞
-                print("识别任务开始！")
-                try:
-                    data=self.current_data[3:]
-                    print(f"{data}\n")    
-                except Exception as e:
-                    print(f"识别任务出错: {e}")
-                finally:
-                    id_event.clear()  # 重置事件状态
-    def read_thread(self):
-        self.put_queue_stream()
-        self.read_queue_stream()
-        time.sleep(0.1)
+            if id_event.wait(timeout=0.5):  # 等待事件触发，带超时
+                if self.id_data:
+                    print(f"ID处理:识别到数据: {self.id_data}")
+                    # 在这里执行具体的识别逻辑...
+                else:
+                    print("ID处理:id_event触发，但current_data不是预期的ID格式。")
+                id_event.clear()  # 重置事件，以便下次可以再次触发
+        print("ID处理线程已停止。")
 
-    def id_stream(self):
-            print("识别任务开始！")
-            id_event.clear()
+    def start_all_threads(self):
+        if not self.ser or not self.ser.is_open:
+            print("无法启动线程：串口未初始化或打开失败。")
+            return
 
-    def threading_start(self):
-        reading_thread = threading.Thread(target=self.read_thread)
-        id_thread = threading.Thread(target=self.id_stream)
-        reading_thread.start()
-        id_thread.start()
-        running_thread_event.set()
+        running_thread_event.set() # 先设置运行标志
+
+        self.threads["reader"] = threading.Thread(target=self.put_queue_stream, daemon=True)
+        self.threads["processor"] = threading.Thread(target=self.read_queue_stream, daemon=True)
+        self.threads["id_handler"] = threading.Thread(target=self.id_stream, daemon=True)
+
+        self.threads["reader"].start()
+        self.threads["processor"].start()
+        self.threads["id_handler"].start()
+
+        print("所有串口相关线程已启动。")
+
+    def stop_all_threads(self):
+        print("正在停止所有串口相关线程...")
+        running_thread_event.clear() # 清除运行标志，通知所有线程退出循环
+
+        # 等待所有线程结束
+        for name, thread_obj in self.threads.items():
+            if thread_obj.is_alive():
+                print(f"等待线程 {name} 结束...")
+                thread_obj.join(timeout=1.0) # 给1秒超时
+                if thread_obj.is_alive():
+                    print(f"警告：线程 {name} 未能在超时内结束。")
         
+        self.threads.clear()
+
+        if self.ser and self.ser.is_open:
+            self.ser.close()
+            print("串口已关闭。")
+        print("所有串口相关线程已停止，串口已关闭。")
+
 class Oled:###finished
 
     """OLED luma 驱动库测试程序
@@ -199,7 +266,7 @@ class CarMove(Serial):
         command = f"3|{centimeter}|{val}"
         self.send_command(command)
 
-    def ahead(self, val):
+    def ahead(self, val=40):
         command = f"1|{val}|0"
         self.send_command(command)
 
@@ -220,8 +287,42 @@ class CarMove(Serial):
             print(f"未知步骤: {step_name}")
 
     def execute_route(self):
-        
-        print(f"开始执行路由，共 {len(self.route_steps)} 个步骤")
+        if not (self.ser and self.ser.is_open):
+            print("CarMove: 无法执行路径，串口未连接。")
+            return
+
+        print(f"CarMove: 开始执行路径，共 {len(self.route_steps)} 个步骤。")
+        self.current_step = 0 # 从路径的第一个步骤开始
+
+        while self.current_step < len(self.route_steps) and running_thread_event.is_set():
+            current_step_name = self.route_steps[self.current_step]
+            print(f"\n--- 路径步骤 {self.current_step + 1}/{len(self.route_steps)}: {current_step_name} ---")
+
+            # 执行当前步骤的动作
+            if not self.execute_step(current_step_name):
+                print(f"CarMove: 执行步骤 '{current_step_name}' 失败，路径终止。")
+                break
+            print(f"CarMove: 等待步骤 '{current_step_name}' 完成信号 (stop_event)...")
+
+
+            while running_thread_event.is_set():
+
+                if stop_event.wait(timeout=0.1): # 等待 stop_event，带超时
+                    print(f"CarMove: 收到步骤 '{current_step_name}' 完成信号 (stop_event)。")
+                    stop_event.clear()  
+                    self.current_step += 1 # 移动到路径中的下一个步骤
+                    break # 跳出内部的等待循环，进入下一个路径步骤
+
+            else: # 如果 running_thread_event 被清除了 (外部循环的条件)
+                print("CarMove: 路径执行被外部中断 (running_thread_event cleared)。")
+                break 
+
+            time.sleep(0.5)
+
+        if self.current_step >= len(self.route_steps):
+            print("CarMove: 路径所有步骤执行完毕。")
+        elif not running_thread_event.is_set():
+            print("CarMove: 路径执行因程序关闭而中止。")
 
 
 
@@ -304,6 +405,7 @@ class Detect:
         self.contours, _ = cv2.findContours(img_gradient, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
     def shape_detect(self):
+
         """
         形状识别
         """
@@ -317,7 +419,7 @@ class Detect:
         #   / \
         #  B---C
             if len(approx) == 3:
-                shape = "Triangle"
+                shape_type = "Triangle"
                 center_x, center_y = self.Centroid(cnt)
                 print(f"三角形中心: ({center_x}, {center_y})")
                 pts = approx.squeeze()  # 形状应为(3,2)
@@ -338,7 +440,7 @@ class Detect:
                 else:
                         shape_type = "其他三角形"
             elif len(approx) == 4:
-                shape = "Rectangle"
+                shape_type = "Rectangle"
                 x, y, w, h = cv2.boundingRect(approx)
                 center_x, center_y = self.Centroid(cnt)
                 approx = np.array(approx).squeeze()
@@ -381,7 +483,7 @@ class Detect:
                 return x,y,center_x,center_y,shape_type, hollow, color
                             
             else:
-                shape = "Circle"
+                shape_type = "Circle"
         if self.if_shape_test:
             print(A,B,C,D)
             print(angle_AB_AD*180/np.pi,angle_AB_CD*180/np.pi)
@@ -543,8 +645,58 @@ class Detect:
 
 
 
-if __name__ == "__main__":###此处进行全局调试
+if __name__ == "__main__":
+    SERIAL_PORT = '/dev/ttyUSB0'
+    BAUD_RATE = 115200
 
-    car=CarMove('/dev/ttyUSB0', 115200)
-    running_thread_event.set()
-    Serial.threading_start()
+    print("程序启动...")
+    car = None
+
+    # running_thread_event 应该在程序开始时设置，在结束时清除
+    running_thread_event.set() # 设置全局运行标志
+
+    try:
+        car = CarMove(SERIAL_PORT, BAUD_RATE)
+        car.start_all_threads() # 启动串口读写和ID处理等后台线程
+        time.sleep(0.5) # 给后台线程一点启动时间
+
+        print("准备在主线程中开始执行路径...")
+        if car.ser and car.ser.is_open: # 确保串口已成功打开
+            car.execute_route() # 直接在主线程调用，会阻塞直到完成或中断
+            print("路径执行结束或被中断。")
+        else:
+            print("串口未成功打开，无法执行路径。")
+
+        # 路径执行完毕后，主线程可以继续做其他事情，或者准备退出
+        # 如果路径执行是程序的唯一主要任务，执行完毕后可以考虑停止所有线程并退出
+        print("路径执行完毕，准备关闭程序...")
+        running_thread_event.clear() # 发出停止信号给所有后台线程
+
+    except serial.SerialException:
+        print(f"无法初始化车辆控制：串口 {SERIAL_PORT} 存在问题。程序退出。")
+        running_thread_event.clear() # 发生严重错误，也应尝试停止后台线程
+    except KeyboardInterrupt:
+        print("\n接收到 Ctrl+C, 程序准备退出...")
+        running_thread_event.clear() # 用户中断，发出停止信号
+    except Exception as e:
+        print(f"发生未预料的错误: {e}")
+        running_thread_event.clear() # 未知错误，也应尝试停止后台线程
+    finally:
+        # 确保 running_thread_event 在 finally 块之前已经被 clear()
+        # 如果没有，可以在这里再次 clear()，但通常在 except 块中处理更好
+        # running_thread_event.clear() # 确保所有线程都会收到停止信号
+
+        print("正在执行清理操作...")
+        if car:
+            # 如果 execute_route 是因为 KeyboardInterrupt 中断的，
+            # car 对象可能还在，需要停止其后台线程
+            car.stop_all_threads() # 这个方法内部会等待线程结束并关闭串口
+        else:
+            # 如果 car 初始化失败，running_thread_event 可能仍然是 set 状态
+            # 但由于没有 car 对象，也就没有 car.stop_all_threads() 可调用
+            # 不过，如果后台线程（如OLED、Pan的线程）也依赖 running_thread_event，
+            # 它们会因为 running_thread_event.clear() 而停止。
+            pass
+
+        print("程序已退出。")
+
