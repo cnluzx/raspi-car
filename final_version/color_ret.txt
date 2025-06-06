@@ -1,0 +1,16 @@
+��ɫ: orange
+H Min: 5
+S Min: 180
+V Min: 76
+H Max: 37
+S Max: 255
+V Max: 255
+Erode Iter: 1
+Dilate Iter: 1
+--------------------------------------------------
+Color Name: orange
+Min HSV: 0,180,79
+Max HSV: 37,255,255
+Erode Iter: 1
+Dilate Iter: 3
+--------------------------------------------------
